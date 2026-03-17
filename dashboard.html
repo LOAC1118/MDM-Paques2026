@@ -785,27 +785,55 @@ function chatInit(login, nom, role, commercial, allComptes){
 
   var fab = document.getElementById('chat-fab');
 
-  if(role === 'client' && commercial){
-    // Client : conversation avec son commercial
-    _chatConvId     = login + '_' + commercial;
-    _chatPartnerNom = _getCommercialNom(commercial, allComptes);
-    _setChatHeader(_chatPartnerNom, 'Commercial MDM');
+  if(role === 'client'){
+    var partner = commercial || 'admin';
+    _chatConvId     = login + '_' + partner;
+    _chatPartnerNom = _getCommercialNom(partner, allComptes) || 'Moulin des Moines';
+    _setChatHeader(_chatPartnerNom, 'Votre contact MDM');
     if(fab) fab.style.display = 'flex';
+    if(!commercial){
+      initFirebase().then(function(db){
+        return db.collection('comptes').doc(login).get();
+      }).then(function(doc){
+        if(doc.exists){
+          var d=doc.data();
+          if(d.commercial){
+            _chatConvId=login+'_'+d.commercial;
+            _chatPartnerNom=_getCommercialNom(d.commercial,allComptes)||d.commercial;
+            _setChatHeader(_chatPartnerNom,'Votre commercial MDM');
+          }
+        }
+      }).catch(function(){});
+    }
     chatLoadUnread();
 
   } else if(role === 'user'){
-    // Commercial : voir ses clients
-    _chatClients = (allComptes||[]).filter(function(c){
-      return c.role === 'client' && c.commercial === login;
+    initFirebase().then(function(db){
+      return db.collection('comptes').where('commercial','==',login).where('role','==','client').get();
+    }).then(function(snap){
+      _chatClients = snap.docs.map(function(d){ return d.data(); });
+      if(_chatClients.length > 0){
+        _fillClientSelector();
+        var sel=document.getElementById('chat-client-selector');
+        if(sel) sel.style.display='block';
+        _setChatHeader('Messagerie clients',_chatClients.length+' client(s)');
+        if(fab) fab.style.display='flex';
+        chatLoadAllUnread();
+      } else {
+        _setChatHeader('Messagerie','MDM');
+        if(fab) fab.style.display='flex';
+      }
+    }).catch(function(){
+      _chatClients=(allComptes||[]).filter(function(c){return c.role==='client'&&c.commercial===login;});
+      if(_chatClients.length>0){
+        _fillClientSelector();
+        var sel=document.getElementById('chat-client-selector');
+        if(sel) sel.style.display='block';
+        _setChatHeader('Messagerie clients',_chatClients.length+' client(s)');
+        if(fab) fab.style.display='flex';
+        chatLoadAllUnread();
+      }
     });
-    if(_chatClients.length > 0){
-      _fillClientSelector();
-      var sel = document.getElementById('chat-client-selector');
-      if(sel) sel.style.display = 'block';
-      _setChatHeader('Messagerie clients', _chatClients.length + ' client(s)');
-      if(fab) fab.style.display = 'flex';
-      chatLoadAllUnread();
-    }
   }
 }
 
